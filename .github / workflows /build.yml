@@ -1,0 +1,49 @@
+name: Build pointercrate binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pointercrate
+          POSTGRES_PASSWORD: pointercrate
+          POSTGRES_DB: pointercrate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://pointercrate:pointercrate@localhost/pointercrate
+        run: cargo sqlx migrate run
+
+      - name: Build release binary
+        env:
+          DATABASE_URL: postgresql://pointercrate:pointercrate@localhost/pointercrate
+        run: cargo build --release -p pointercrate-example
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pointercrate-binary
+          path: target/release/pointercrate-example
